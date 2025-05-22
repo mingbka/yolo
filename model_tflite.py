@@ -1,47 +1,66 @@
 import numpy as np
 import cv2
 import tensorflow as tf
+import sys
 
-def preprocess_frame(frame):
-    # Resize frame từ 1920x1080 về 640x640
-    resized = cv2.resize(frame, (640, 640))
+class VehicleTracking:
+    def __init__(self, model_path: str, video_path):
+        self.model_path = model_path
 
-    # Chuyển BGR → RGB
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
+        self.interpreter.allocate_tensors()
 
-    # Normalize pixel từ [0, 255] về [0.0, 1.0]
-    normalized = rgb / 255.0
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
 
-    # Thêm chiều batch và chuyển sang float32
-    input_data = np.expand_dims(normalized, axis=0).astype(np.float32)
+        self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise IOError("Lỗi: Không thể mở file video.")
+        
+        self.classNames = ["car", "motor", "truck", "bus"]
 
-    return input_data
+    def preprocess(self, frame):
+        h, w = frame.shape[:2]
+        pad = (w - h) // 2
+        padded = cv2.copyMakeBorder(frame, pad, pad, 0, 0, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+        resized = cv2.resize(padded, (640, 640))
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        return np.expand_dims(rgb / 255.0, axis=0).astype(np.float32)
+    
+    def run(self):
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                print("Kết thúc video")
+                break
 
-# Load mô hình TFLite
-interpreter = tf.lite.Interpreter(model_path="yolo11m_integer_quant.tflite")
-interpreter.allocate_tensors()
+            input_data = self.preprocess(frame)
 
-# Lấy input/output details
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+            # Inference
+            self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+            self.interpreter.invoke()
 
-print(input_details, output_details)
+            # Lấy kết quả
+            output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
 
-# # Load ảnh và tiền xử lý
-# image = cv2.imread("the_loop.png")
-# image_resized = cv2.resize(image, (640, 640))
-# input_data = np.expand_dims(image_resized, axis=0).astype(np.float32) / 255.0
+            # output_data thường có dạng [1, N, 6] (x1, y1, x2, y2, score, class)
+            for det in output_data[0]:
+                x1, y1, x2, y2, conf, cls = det
+                cls_name = self.classNames[int(cls)]
+                if conf > 0.5:
+                    print(f"{cls_name}: {conf:.2f} at [{x1:.0f}, {y1:.0f}, {x2:.0f}, {y2:.0f}]")
 
-# # Inference
-# interpreter.set_tensor(input_details[0]['index'], input_data)
-# interpreter.invoke()
+        self.cap.release()
+        cv2.destroyAllWindows()
 
-# # Lấy kết quả
-# output_data = interpreter.get_tensor(output_details[0]['index'])
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Cách dùng: python model_tflite.py <model_path> <video_path>")
+        sys.exit(1)
 
-# # output_data thường có dạng [1, N, 6] (x1, y1, x2, y2, score, class)
-# for det in output_data[0]:
-#     x1, y1, x2, y2, conf, cls = det
-#     if conf > 0.3:
-#         print(f"Class {int(cls)}: {conf:.2f} at [{x1:.0f}, {y1:.0f}, {x2:.0f}, {y2:.0f}]")
+    model_path = sys.argv[1]
+    video_path = sys.argv[2]
+
+    processor = VehicleTracking(model_path, video_path)
+    processor.run()
 

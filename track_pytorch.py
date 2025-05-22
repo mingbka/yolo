@@ -30,7 +30,6 @@ class VideoProcessor:
             cv2.putText(frame, label, (x1, y1 - baseline // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
     def process_video(self, video_path):
-        total_processing_time = 0.0
         frame_count = 0
 
         try:
