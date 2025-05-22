@@ -1,0 +1,9 @@
+dvenv/
+runs/
+trackers/
+.dockerignore
+Dockerfile
+draw_mask.py
+test.py
+*.png
+*.mp4
