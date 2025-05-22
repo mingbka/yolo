@@ -7,3 +7,5 @@ draw_mask.py
 test.py
 *.png
 *.mp4
+*.tflite
+*.pt
