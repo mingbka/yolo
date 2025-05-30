@@ -9,3 +9,4 @@ test.py
 *.mp4
 *.tflite
 *.pt
+yolo_weights_tflite/
