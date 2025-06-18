@@ -38,6 +38,7 @@ class VehicleTracker:
         self.class_names = class_names
         self.lane = lane
         self.ema_value = 0
+        self.vid_stride = 2
 
         # Khởi tạo buffer lưu tối đa 10 tốc độ
         self.speed_buffer = SpeedBuffer(max_size=10)
@@ -62,7 +63,7 @@ class VehicleTracker:
                         vehicle_counter[class_name] += 1
 
     def cal_speed(self, boxes, clss, track_ids, car_speed):
-        fps = 30
+        fps = 30 / self.vid_stride
         car_length = 8.9
         trigger_line = 500
 
@@ -133,7 +134,7 @@ class VehicleTracker:
 
         if density < 120:
             print("Status: Moderate traffic")
-        if density < 230:
+        if 120 < density < 230:
             print("Status: Heavy traffic")
         else:
             print("Status: Congested traffic")
@@ -170,7 +171,7 @@ class VehicleTracker:
                 verbose=False,
                 stream=True,
                 imgsz=512,
-                vid_stride=1
+                vid_stride=self.vid_stride
             )
 
             for frame_count, result in enumerate(results):
@@ -181,7 +182,7 @@ class VehicleTracker:
                 self.count(boxes, track_ids, clss, total_count, vehicle_counter)
                 avg_speed = self.cal_speed(boxes, clss, track_ids, car_speed)
 
-                if frame_count % 1800 == 0 and frame_count > 0:
+                if frame_count % (1800 / self.vid_stride) == 0 and frame_count > 0:
                     self.ema_value = self.cal_ema(vehicle_pcu, vehicle_counter)
                     self.cal_density(self.ema_value, avg_speed)            
 
@@ -194,7 +195,7 @@ class VehicleTracker:
             traceback.print_exc()
 
         if frame_count > 0:
-            avg_fps = frame_count / (end_time - start_time)
+            avg_fps = frame_count * self.vid_stride / (end_time - start_time)
             print(f"Tốc độ xử lý trung bình (FPS): {avg_fps:.2f}")
         else:
             print("Không có khung hình nào được xử lý.")

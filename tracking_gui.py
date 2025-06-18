@@ -39,6 +39,7 @@ class VehicleTracker:
         self.class_colors = class_colors
         self.lane = lane
         self.ema_value = 0
+        self.vid_stride = 2
 
         # Khởi tạo buffer lưu tối đa 10 tốc độ
         self.speed_buffer = SpeedBuffer(max_size=10)
@@ -87,7 +88,7 @@ class VehicleTracker:
                 cv2.putText(frame, label, (x1, y1 - baseline // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
     def cal_speed(self, frame, boxes, clss, track_ids, car_speed):
-        fps = 30
+        fps = 30 / self.vid_stride
         car_length = 8.9
         trigger_line = 500
 
@@ -115,7 +116,7 @@ class VehicleTracker:
                 continue
 
             # Bước 1: Bắt đầu tính tốc độ
-            if y2 >= trigger_line and y2 < trigger_line + 15 and not info["status"]:
+            if y2 >= trigger_line and y2 <= trigger_line + 25 and not info["status"]:
                 info["status"] = True
                 info["frame_count"] = 1
 
@@ -124,7 +125,7 @@ class VehicleTracker:
                 info["frame_count"] += 1
 
                 # Bước 3: Nếu xe đi qua vạch (end_y)
-                if y1 >= trigger_line  and y1 < trigger_line + 15:
+                if (y1 >= trigger_line):
                     speed = (fps * car_length * 3.6) / info["frame_count"]
                     info["speed"] = speed
                     info["finished"] = True
@@ -164,10 +165,11 @@ class VehicleTracker:
         return ema_value
             
     def cal_density(self, frame, frame_count, ema_value, avg_speed):
-        density = ema_value * 60 / avg_speed if avg_speed != 0 else 0
+        density = ema_value * 60 / (avg_speed * self.lane) if avg_speed != 0 else 0
+        
         if density < 120:
             color = (0, 255, 0)
-        if density < 230:
+        if 120 < density < 230:
             color = (0, 255, 255)
         else:
             color = (0, 0, 255)
@@ -207,7 +209,7 @@ class VehicleTracker:
                 verbose=False,
                 stream=True,
                 imgsz=512,
-                vid_stride=1
+                vid_stride=self.vid_stride
             )
 
             for frame_count, result in enumerate(results):
@@ -220,7 +222,7 @@ class VehicleTracker:
                 self.draw_n_count(frame, boxes, track_ids, clss, total_count, vehicle_counter)
                 avg_speed = self.cal_speed(frame, boxes, clss, track_ids, car_speed)
 
-                if frame_count % 1800 == 0 and frame_count > 0:
+                if frame_count % (1800 / self.vid_stride) == 0 and frame_count > 0:
                     self.ema_value = self.cal_ema(vehicle_pcu, vehicle_counter)
 
                 if self.ema_value != 0:
@@ -245,7 +247,7 @@ class VehicleTracker:
             traceback.print_exc()
 
         if frame_count > 0:
-            avg_fps = frame_count / (end_time - start_time)
+            avg_fps = frame_count * self.vid_stride / (end_time - start_time)
             print(f"Tốc độ xử lý trung bình (FPS): {avg_fps:.2f}")
         else:
             print("Không có khung hình nào được xử lý.")
