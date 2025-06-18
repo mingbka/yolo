@@ -4,6 +4,8 @@ trackers/
 .dockerignore
 Dockerfile
 draw_mask.py
+detect.py
+mobilenet.py
 test.py
 *.png
 *.mp4
