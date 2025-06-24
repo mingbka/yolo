@@ -64,8 +64,9 @@ class VehicleTracker:
 
     def cal_speed(self, boxes, clss, track_ids, car_speed):
         fps = 30 / self.vid_stride
-        car_length = 8.9
-        trigger_line = 500
+        meter_length = 6
+        pixel_length = 180
+        trigger_line = 430
 
         for i, box in enumerate(boxes):
             cls_id = int(clss[i])
@@ -91,7 +92,7 @@ class VehicleTracker:
                 continue
 
             # Bước 1: Bắt đầu tính tốc độ
-            if y2 >= trigger_line and y2 < trigger_line + 15 and not info["status"]:
+            if y2 >= trigger_line and y2 <= trigger_line + 25 and not info["status"]:
                 info["status"] = True
                 info["frame_count"] = 1
 
@@ -100,8 +101,8 @@ class VehicleTracker:
                 info["frame_count"] += 1
 
                 # Bước 3: Nếu xe đi qua vạch (end_y)
-                if y1 >= trigger_line  and y1 < trigger_line + 15:
-                    speed = (fps * car_length * 3.6) / info["frame_count"]
+                if (y2 >= trigger_line + pixel_length):
+                    speed = (fps * meter_length * 3.6) / info["frame_count"]
                     info["speed"] = speed
                     info["finished"] = True
 
@@ -132,9 +133,9 @@ class VehicleTracker:
         density = ema_value * 60 / (avg_speed * self.lane) if avg_speed != 0 else 0
         print(f"Density: {density:.1f}")
 
-        if density < 120:
+        if density < 100:
             print("Status: Moderate traffic")
-        if 120 < density < 230:
+        elif 120 < density < 200:
             print("Status: Heavy traffic")
         else:
             print("Status: Congested traffic")

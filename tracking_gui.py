@@ -39,7 +39,10 @@ class VehicleTracker:
         self.class_colors = class_colors
         self.lane = lane
         self.ema_value = 0
-        self.vid_stride = 2
+        self.vid_stride = 1
+        self.bus = 0
+        self.truck = 0
+        self.motor = 0
 
         # Khởi tạo buffer lưu tối đa 10 tốc độ
         self.speed_buffer = SpeedBuffer(max_size=10)
@@ -63,23 +66,30 @@ class VehicleTracker:
             # Draw box 
             x1, y1, x2, y2 = map(int, box)
 
-            if y2 < 250 or y1 > line_y:
+            if y2 < 250 or y2 > 900 or x1 < 50 or x2 > 1870:
                 continue
             
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
             # Counting
-            if y2 > line_y and y1 < line_y:
-                if track_id not in total_count:
-                    total_count.append(track_id)
-                    if class_name in vehicle_counter:
-                        vehicle_counter[class_name] += 1
+            if line_y + 100 > y2 > line_y and track_id not in total_count:
+                total_count.append(track_id)
+                vehicle_counter[class_name] += 1
+                
+                if cls_id == 0:
+                    print(f"Bus: {track_id}")
+                    self.bus += 1
+                elif cls_id == 3:
+                    print(f"Truck: {track_id}")
+                    self.truck += 1
+                elif cls_id == 2:
+                    self.motor += 1
 
-                else:
-                    label = f"ID: {track_id} {class_name} counted"
-                    (label_width, label_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    cv2.rectangle(frame, (x1, y1 - label_height - baseline // 2), (x1 + label_width, y1), (0, 69, 255), -1)
-                    cv2.putText(frame, label, (x1, y1 - baseline // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+            elif 900 > y2 > line_y and track_id in total_count:
+                label = f"ID: {track_id} {class_name} counted"
+                (label_width, label_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                cv2.rectangle(frame, (x1, y1 - label_height - baseline // 2), (x1 + label_width, y1), (0, 69, 255), -1)
+                cv2.putText(frame, label, (x1, y1 - baseline // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
             else:
                 label = f"ID:{track_id} {class_name}"
@@ -89,8 +99,9 @@ class VehicleTracker:
 
     def cal_speed(self, frame, boxes, clss, track_ids, car_speed):
         fps = 30 / self.vid_stride
-        car_length = 8.9
-        trigger_line = 500
+        meter_length = 6
+        pixel_length = 180
+        trigger_line = 430
 
         for i, box in enumerate(boxes):
             cls_id = int(clss[i])
@@ -125,8 +136,8 @@ class VehicleTracker:
                 info["frame_count"] += 1
 
                 # Bước 3: Nếu xe đi qua vạch (end_y)
-                if (y1 >= trigger_line):
-                    speed = (fps * car_length * 3.6) / info["frame_count"]
+                if (y2 >= trigger_line + pixel_length):
+                    speed = (fps * meter_length * 3.6) / info["frame_count"]
                     info["speed"] = speed
                     info["finished"] = True
 
@@ -154,7 +165,7 @@ class VehicleTracker:
             count = vehicle_counter.get(vehicle_type, 0)
             pcu = vehicle_pcu.get(vehicle_type, 0)
             total_pcu += count * pcu
-            print(f"{vehicle_type}: {count}")
+            # print(f"{vehicle_type}: {count}")
 
         # B2: Reset vehicle_counter 
             vehicle_counter[vehicle_type] = 0
@@ -166,16 +177,17 @@ class VehicleTracker:
             
     def cal_density(self, frame, frame_count, ema_value, avg_speed):
         density = ema_value * 60 / (avg_speed * self.lane) if avg_speed != 0 else 0
+        print(f"Density: {density:.1f}")
         
-        if density < 120:
-            color = (0, 255, 0)
-        if 120 < density < 230:
-            color = (0, 255, 255)
-        else:
-            color = (0, 0, 255)
+        # if density < 120:
+        #     color = (0, 255, 0)
+        # if 120 < density < 230:
+        #     color = (0, 255, 255)
+        # else:
+        #     color = (0, 0, 255)
 
-        if (frame_count // 15) % 2 == 0:
-            cv2.circle(frame, (200, 35), 25, color, -1)
+        # if (frame_count // 15) % 2 == 0:
+        #     cv2.circle(frame, (200, 35), 25, color, -1)
 
     def process_video(self, video_path):
         total_count = []
@@ -224,8 +236,6 @@ class VehicleTracker:
 
                 if frame_count % (1800 / self.vid_stride) == 0 and frame_count > 0:
                     self.ema_value = self.cal_ema(vehicle_pcu, vehicle_counter)
-
-                if self.ema_value != 0:
                     self.cal_density(frame, frame_count, self.ema_value, avg_speed)
 
                 cv2.imshow("YOLO Tracking", frame)               
@@ -249,6 +259,7 @@ class VehicleTracker:
         if frame_count > 0:
             avg_fps = frame_count * self.vid_stride / (end_time - start_time)
             print(f"Tốc độ xử lý trung bình (FPS): {avg_fps:.2f}")
+            print(f"Bus: {self.bus}, Truck: {self.truck}, Motor: {self.motor}")
         else:
             print("Không có khung hình nào được xử lý.")
 
