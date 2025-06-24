@@ -55,12 +55,13 @@ class VehicleTracker:
             class_name = self.class_names[cls_id]
             x1, y1, x2, y2 = map(int, box)
 
+            if y2 < 250 or y2 > 900 or x1 < 50 or x2 > 1870:
+                continue
+
             # Counting
-            if y2 > line_y and y1 < line_y:
-                if track_id not in total_count:
-                    total_count.append(track_id)
-                    if class_name in vehicle_counter:
-                        vehicle_counter[class_name] += 1
+            if line_y + 100 > y2 > line_y and track_id not in total_count:
+                total_count.append(track_id)
+                vehicle_counter[class_name] += 1
 
     def cal_speed(self, boxes, clss, track_ids, car_speed):
         fps = 30 / self.vid_stride
