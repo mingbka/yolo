@@ -5,7 +5,7 @@ import numpy as np
 import sys
 
 class SpeedBuffer:
-    def __init__(self, max_size=10):
+    def __init__(self, max_size):
         self.max_size = max_size
         self.buffer = []
 
@@ -18,6 +18,17 @@ class SpeedBuffer:
         if not self.buffer:
             return 0.0
         return sum(self.buffer) / len(self.buffer)
+    
+# Buffer lưu id của phương tiện
+class CountBuffer:
+    def __init__(self, max_size=200):
+        self.max_size = max_size
+        self.buffer = []
+    
+    def add_vehicle(self, id):
+        self.buffer.append(id)
+        if len(self.buffer) > self.max_size:
+            self.buffer.pop(0)
     
 class EMAFilter:
     def __init__(self, alpha):
@@ -38,15 +49,18 @@ class VehicleTracker:
         self.class_names = class_names
         self.lane = lane
         self.ema_value = 0
-        self.vid_stride = 2
+        self.vid_stride = 1
 
         # Khởi tạo buffer lưu tối đa 10 tốc độ
-        self.speed_buffer = SpeedBuffer(max_size=10)
+        self.speed_buffer = SpeedBuffer(max_size=30)
 
         # Hàm tính EMA
         self.ema_filter = EMAFilter(alpha=2/(10+1))
+
+        # Khởi tạo buffer lưu tối đa 200 id của phương tiện
+        self.vehicle_count = CountBuffer(max_size=200)
     
-    def count(self, boxes, track_ids, clss, total_count, vehicle_counter):
+    def count(self, boxes, track_ids, clss, vehicle_counter):
         line_y = 500
 
         for i, box in enumerate(boxes):
@@ -59,8 +73,8 @@ class VehicleTracker:
                 continue
 
             # Counting
-            if line_y + 100 > y2 > line_y and track_id not in total_count:
-                total_count.append(track_id)
+            if line_y + 100 > y2 > line_y and track_id not in self.vehicle_count.buffer:
+                self.vehicle_count.add_vehicle(track_id)
                 vehicle_counter[class_name] += 1
 
     def cal_speed(self, boxes, clss, track_ids, car_speed):
@@ -93,7 +107,7 @@ class VehicleTracker:
                 continue
 
             # Bước 1: Bắt đầu tính tốc độ
-            if y2 >= trigger_line and y2 <= trigger_line + 25 and not info["status"]:
+            if y2 >= trigger_line and y2 <= trigger_line + 15 and not info["status"]:
                 info["status"] = True
                 info["frame_count"] = 1
 
@@ -102,7 +116,7 @@ class VehicleTracker:
                 info["frame_count"] += 1
 
                 # Bước 3: Nếu xe đi qua vạch (end_y)
-                if (y2 >= trigger_line + pixel_length):
+                if (y2 >= trigger_line + pixel_length and y2 <= trigger_line + pixel_length + 15):
                     speed = (fps * meter_length * 3.6) / info["frame_count"]
                     info["speed"] = speed
                     info["finished"] = True
@@ -168,7 +182,7 @@ class VehicleTracker:
                 tracker=self.tracker_config,
                 persist=True,
                 conf=0.5,
-                iou=0.6,
+                iou=0.3,
                 show=False,
                 verbose=False,
                 stream=True,
@@ -203,13 +217,13 @@ class VehicleTracker:
             print("Không có khung hình nào được xử lý.")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Syntax: python track_pytorch.py <model_path> <video_path> <lane>")
+    if len(sys.argv) < 3:
+        print("Syntax: python track_pytorch.py <video_path> <lane>")
         sys.exit(1)
 
-    model_path = sys.argv[1]
-    video_path = sys.argv[2]
-    lane = int(sys.argv[3])
+    model_path = 'weights/yv8n24.pt'
+    video_path = sys.argv[1]
+    lane = int(sys.argv[2])
 
     # Cấu hình
     TRACKER_CONFIG_PATH = 'bytetrack.yaml'
